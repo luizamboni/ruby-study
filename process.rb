@@ -1,9 +1,12 @@
+require "colorize"
+# require "byebug"
 
 def gen_server limit=nil
   pid = fork do
     count = 1
     while true
-      puts "inside fork pid #{Process.pid} #{count+=1}"
+      
+      puts "inside fork pid #{Process.pid} #{count+=1}".send(count % 2 === 0 ? :green : :blue)
       sleep(0.2)
       exit if count === limit && limit
     end
