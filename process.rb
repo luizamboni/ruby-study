@@ -6,7 +6,7 @@ def gen_server limit=nil
     count = 1
     while true
       
-      puts "inside fork pid #{Process.pid} #{count+=1}".send(count % 2 === 0 ? :green : :blue)
+      puts "inside fork pid #{Process.pid} #{count+=1}".send(count % 2 === 0 ? :green : :red)
       sleep(0.2)
       exit if count === limit && limit
     end
