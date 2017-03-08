@@ -1,14 +1,19 @@
+GIT
+  remote: git://github.com/deivid-rodriguez/byebug.git
+  revision: d7f6a399e4fc7fd3cf2b5468dcf8252f2b706303
+  specs:
+    byebug (9.0.6)
+
 GEM
   remote: https://rubygems.org/
   specs:
-    byebug (9.0.6)
     colorize (0.8.1)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
-  byebug
+  byebug!
   colorize
 
 BUNDLED WITH
