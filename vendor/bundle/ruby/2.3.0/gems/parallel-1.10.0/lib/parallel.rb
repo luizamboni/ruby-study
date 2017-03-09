@@ -2,6 +2,7 @@ require 'rbconfig'
 require 'parallel/version'
 require 'parallel/processor_count'
 
+
 module Parallel
   extend Parallel::ProcessorCount
 

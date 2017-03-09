@@ -4,6 +4,7 @@ require "byebug"
 options = { in_processes: 3 }
 
 results = Parallel.map(['a','b','c'], options ) { |letter| 
+	debugger
   puts letter 
 }
 

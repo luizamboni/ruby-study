@@ -1,22 +1,23 @@
-GIT
-  remote: git://github.com/deivid-rodriguez/byebug.git
-  revision: d7f6a399e4fc7fd3cf2b5468dcf8252f2b706303
-  specs:
-    byebug (9.0.6)
-
 GEM
   remote: https://rubygems.org/
   specs:
+    byebug (3.5.0)
+      columnize (~> 0.8)
+      debugger-linecache (~> 1.2)
+      slop (~> 3.6)
     colorize (0.8.1)
+    columnize (0.9.0)
+    debugger-linecache (1.2.0)
     parallel (1.10.0)
+    slop (3.6.0)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
-  byebug!
+  byebug (= 3.5.0)
   colorize
   parallel
 
 BUNDLED WITH
-   1.14.3
+   1.11.2

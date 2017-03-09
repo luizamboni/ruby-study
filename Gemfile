@@ -2,5 +2,5 @@ source 'https://rubygems.org'
 
 # gem 'mysql2'
 gem 'colorize'
-gem 'byebug', github: 'deivid-rodriguez/byebug'
+gem 'byebug', '3.5.0'
 gem "parallel"
