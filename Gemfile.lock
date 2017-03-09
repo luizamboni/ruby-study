@@ -8,6 +8,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     colorize (0.8.1)
+    parallel (1.10.0)
 
 PLATFORMS
   ruby
@@ -15,6 +16,7 @@ PLATFORMS
 DEPENDENCIES
   byebug!
   colorize
+  parallel
 
 BUNDLED WITH
    1.14.3
