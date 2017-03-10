@@ -2,7 +2,6 @@ require 'rbconfig'
 require 'parallel/version'
 require 'parallel/processor_count'
 
-
 module Parallel
   extend Parallel::ProcessorCount
 
@@ -86,7 +85,6 @@ module Parallel
 
   class JobFactory
     def initialize(source, mutex)
-      debugger
       @lambda = (source.respond_to?(:call) && source) || queue_wrapper(source)
       @source = source.to_a unless @lambda # turn Range and other Enumerable-s into an Array
       @mutex = mutex
