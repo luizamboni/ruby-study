@@ -3,40 +3,48 @@ require 'benchmark'
 require 'memory_profiler'
 require 'net/http'
 require 'byebug'
+require 'logger'
 
+@logger = Logger.new(STDOUT)
+@logger.level = Logger::DEBUG
 
+def log string
+  # puts string
+end
 n = 50
 
 class NoBlockingClient
-  def initialize() 
+  def initialize()
+    @io_n = 0
     @sockets = []
     @event_loop = Thread.new {
 
       # while this instance exist
       while self do
-        puts @sockets
+        log "event loop init"
         sockets = @sockets.map { |entry| entry[:socket] }
 
-        # puts "before"
         sleep(0.3)
-        # puts "list of sockets: ", sockets
+        log" sockets to monitoring: #{sockets.size} "
         if sockets.any? 
-          read_sockets, w_sockets = IO.select( sockets, sockets, sockets, 1)
-          puts "sockers ready:" , read_sockets
+          read_sockets, w_sockets = IO.select( sockets, sockets, sockets, 0.5)
+          log "sockets ready: #{ read_sockets.size}"
           read_sockets.each do |s|
             current = @sockets.find{ |s2| s2[:socket].__id__ == s.__id__ }
             callback = current[:callback]
-            current[:result] = callback.call(s.read)
+            current[:result] = callback.call(s.read, current)
             s.close
-            @sockets.delete(s)
+            log "#{current[:n]} RESOLVED"
+
+            @sockets.delete(current)
           end
         end
-        # puts "after"
+        log "event loop end"
       end
     }
   end
 
-  def request url=nil, callback = -> (content) { puts content }
+  def request url=nil, callback = -> (content, current = nil) { puts content }
 
     break_line = "\r\n"
 
@@ -59,11 +67,13 @@ class NoBlockingClient
     ].join("")
 
     s.write request
-
-    current = { socket: s, callback: callback, result: nil }
+    @io_n += 1
+    puts @io_n
+    current = { socket: s, callback: callback, result: nil, n: @io_n  }
     @sockets << current
 
     Fiber.new {
+
       loop do
         if s.closed? 
           break
@@ -77,37 +87,25 @@ class NoBlockingClient
 end
 
 
-def example 
-  url = "http://google.com"
+url = "http://localhost:3000"
 
-  count = 0
-  client = NoBlockingClient.new
+count = 0
+client = NoBlockingClient.new
 
+callback =  -> (content, current) { 
+  # puts content
+  puts "current: #{current[:n]}"
+  count += 1
+  puts "callbacks called #{count} for item #{current[:n]}"
+  current[:n]
+}
 
-  results = [
-    client.request(url),
-    client.request(url),
-    client.request(url),
-    client.request(url),
-    client.request(url),
-    client.request(url)
-  ]
+results = (1..200).map{ |i| client.request(url, callback) }
+# debugger
 
-  puts results.map(&:resume)
-
-  puts Thread.list.count
-end
-
-example()
-sleep 2
-puts Thread.list.count
+puts results.map(&:resume)
+puts "\n\n"
 
 
-# client.request(url, -> (content) {
-  
-#   puts content
-#   count += 1
-#   puts count
-# })
-
+sleep 1
 
