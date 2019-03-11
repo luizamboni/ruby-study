@@ -11,11 +11,11 @@ function latency() {
 
 http.createServer(function (req, res) {
   
-
+  const latency = latency()
   setTimeout(() => {
     res.write('Hello World!'); //write a response to the client
     res.end(); //end the response
-  }, latency())
+  }, latency)
 
 }).listen(3000, () => {
   console.log("started")

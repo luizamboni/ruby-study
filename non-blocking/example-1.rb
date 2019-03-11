@@ -13,7 +13,53 @@ def log string
   # puts string
 end
 
-n = 5
+
+
+def break_line
+  "\r\n"
+end
+
+def generate_request url
+  uri = URI(url)
+
+  request_line = "GET / HTTP/1.0#{break_line}"
+
+  headers = [
+    "Content-Length:0",
+    "Host:#{uri.hostname}"
+  ].join(break_line)
+    
+  socket = TCPSocket.new uri.hostname, uri.port
+
+  request = [ 
+    request_line,
+    headers,
+    break_line,
+    break_line
+  ].join("")
+
+  [ socket, request ]
+end
+
+def parse_http_content content
+
+  reqline, tail = content.split "\r\n", 2
+
+  protocol, code, status = reqline.split " ", 3
+
+  raw_headers, raw_body = tail.split "\r\n\r\n", 2
+  headers = raw_headers.split("\r\n").map do |line| 
+    line.split(":", 2)
+  end
+  .reduce({}) do | memo, current |
+    memo[current[0]] = current[1].strip
+    memo
+  end
+
+  raw_body
+end
+
+n = 50
 
 class NoBlockingClient
   def initialize()
@@ -29,15 +75,23 @@ class NoBlockingClient
         log " sockets to monitoring: #{sockets.size} "
 
         if sockets.any? 
-          read_sockets, write_sockets = IO.select( sockets, sockets, sockets, 0.3)
-          log "sockets ready: #{read_sockets.size}"
+          read_sockets, write_sockets, errors = IO.select( sockets, sockets, sockets, 0.1)
 
-          # write_sockets.each do |s|
-          #   log "write socket #{s.__id__}"
-          #   current = @sockets.find{ |s2| s2[:socket].__id__ == s.__id__ }
-          #   s.write current[:write]
-          #   s.close_write
-          # end
+
+          # puts "-" * 40
+          # puts "sockets ready to read: #{read_sockets.size}"
+          # puts "sockets ready to write: #{write_sockets.size}"
+
+          errors.each do |error|
+            puts error.message
+          end
+
+          write_sockets.each do |s|
+            current = @sockets.find{ |s2| s2[:socket].__id__ == s.__id__ }
+            if current[:write]
+              s.write current.delete :write
+            end
+          end
 
           read_sockets.each do |s|
             log "read socket #{s.__id__}"
@@ -63,31 +117,14 @@ class NoBlockingClient
 
   def request url=nil, callback = -> (content, current = nil) {}
 
-    break_line = "\r\n"
 
-    uri = URI(url)
-    request_line = "GET / HTTP/1.0#{break_line}"
-    headers = [
-      "Content-Length:0",
-      "Host:#{uri.hostname}"
-    ].join(break_line)
-    
-    # puts [ uri.hostname , uri.port ].join ":"
-    
-    s = TCPSocket.new uri.hostname, uri.port
+    socket, request = generate_request(url)
 
-    request = [ 
-      request_line,
-      headers,
-      break_line,
-      break_line
-    ].join("")
-
-    s.write request
+    # s.write request
     @io_n += 1
 
     current = { 
-      socket: s, 
+      socket: socket, 
       callback: callback, 
       result: nil,
       n: @io_n,
@@ -116,28 +153,12 @@ end
 
 url = "http://localhost:3000"
 
-count = 0
 client = NoBlockingClient.new
 
+
+
 callback =  -> (content, current) { 
-
-  reqline, tail = content.split "\r\n", 2
-
-  protocol, code, status = reqline.split " ", 3
-
-  raw_headers, raw_body = tail.split "\r\n\r\n", 2
-  headers = raw_headers.split("\r\n").map do |line| 
-    line.split(":", 2)
-  end
-  .reduce({}) do | memo, current |
-    memo[current[0]] = current[1].strip
-    memo
-  end
-
-  count += 1
-  # puts "callbacks called #{count} for item #{current[:n]} in #{current[:duration]} millis"
-
-  raw_body
+  parse_http_content content
 }
 
 
@@ -169,7 +190,7 @@ end
 
 
 # With eventLoop
-puts "Eventloop " + "-" * 40
+puts "Preemptive Eventloop with one dedicated Thread " + "-" * 40
 initial = Time.now.to_f 
 
 tasks = (1..n).map{ |i| 
@@ -189,10 +210,8 @@ puts "\nSync blocking " + "-" * 40
 initial = Time.now.to_f 
 uri = URI(url)
 results = (1..n).map{ |i| 
-  Net::HTTP.get_response(uri).read_body
+  puts Net::HTTP.get_response(uri).read_body
 }
-
-puts results
 
 duration = ((Time.now.to_f - initial) * 1000 ).round 3
 
@@ -204,14 +223,140 @@ puts "\nAsync with Threads " + "-" * 40
 initial = Time.now.to_f 
 uri = URI(url)
 tasks = (1..n).map{ |i| 
-  Thread.new { 
-    Thread.current[:output] = Net::HTTP.get_response(uri) 
+  Thread.new {
+    Net::HTTP.get_response(uri).read_body
   }
 }
 
-puts tasks.map(&:join).map{ |t| t[:output].read_body }
+puts tasks.map(&:join).map(&:value)
 
 duration = ((Time.now.to_f - initial) * 1000 ).round 3
 
 puts "duration #{duration} millis"
 
+puts "\nAsync only with fibers with a IO.select by fiber " + "-" * 20
+initial = Time.now.to_f
+
+
+tasks = (1..n).map{ |i| 
+
+  Fiber.new do
+
+    socket, request = generate_request url
+    out = nil
+    writed = false
+
+    loop do
+
+      reads, writes, errors = IO.select [socket], [socket], [socket], 0.1
+      
+      read, = reads
+
+      if read
+        out = read.read
+        break
+      end
+
+      write, = writes
+
+      if write && !writed
+        write.write request
+        writed = true
+      end
+
+      Fiber.yield :waiting
+    end
+
+    Fiber.yield :ready
+    out
+  end
+}
+
+def await fibers
+
+  results = Array.new fibers.size, :pending
+
+  while results.count{ |i| i == :pending } > 0 do
+    
+    fibers.each_with_index do |fiber, i|
+
+      if fiber.alive?
+        state = fiber.resume
+
+        if state == :ready
+          results[i] = parse_http_content fiber.resume
+        end
+      end
+    end
+  end
+
+  results
+end
+
+
+puts await tasks
+duration = ((Time.now.to_f - initial) * 1000 ).round 3
+puts "duration #{duration} millis"
+
+
+puts "\nAsync only with fibers with one subscribe schedule " + "-" * 20
+
+initial = Time.now.to_f 
+tasks = (1..n).map{ |i| 
+  socket, request = generate_request url
+  { socket: socket, request: request }
+}
+
+
+def subscribe tasks
+
+  results = Array.new tasks.size, :pending
+
+  requests = tasks.reduce({}) do |memo, current|
+    memo[ current[:socket].__id__ ] = current[:request]
+    memo
+  end
+
+  sockets = tasks.map { |entry| entry[:socket] }
+
+  wait_reads = sockets.clone
+  wait_writes = sockets.clone
+
+  loop do
+
+    # puts "wait reads #{wait_reads.size}"
+    # puts "wait writes #{wait_writes.size}"
+
+
+    reads, writes, errors = IO.select(wait_reads, wait_writes, wait_writes + wait_reads, 0.1)
+
+  
+    (writes || []).each do |s|
+      if wait_writes.find_index { |s2| s2.__id__ == s.__id__ }
+        s.write requests[s.__id__]
+        wait_writes.delete s
+      end
+    end
+
+    (reads || []).each do |s|
+      if wait_reads.find_index { |s2| s2.__id__ == s.__id__ }
+
+        index = tasks.find_index { |entry| entry[:socket].__id__ == s.__id__ }
+
+        results[index] = s.read 
+        wait_reads.delete s
+      end
+    end
+
+    if results.count { |item| item == :pending } == 0
+      break
+    end
+  end
+  results.map { |res| parse_http_content(res) }
+end
+
+
+puts subscribe(tasks)
+
+duration = ((Time.now.to_f - initial) * 1000 ).round 3
+puts "duration #{duration} millis"
